@@ -93,9 +93,26 @@
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 220);
     camera.position.set(0, 3.1, 8.5); // Elevated camera for sky runway
 
+    // Debug logging for viewport and camera setup
+    console.log('=== ATHENA DEBUG INFO ===');
+    console.log('Viewport:', { width: window.innerWidth, height: window.innerHeight });
+    console.log('Device pixel ratio:', devicePixelRatio);
+    console.log('Renderer pixel ratio:', Math.min(devicePixelRatio,2));
+    console.log('Camera FOV:', camera.fov);
+    console.log('Camera aspect:', camera.aspect);
+    console.log('Camera position:', camera.position);
+    console.log('User agent:', navigator.userAgent);
+    console.log('Screen resolution:', { width: screen.width, height: screen.height });
+    console.log('Window outer dimensions:', { width: window.outerWidth, height: window.outerHeight });
+
     function resize(){
       renderer.setSize(window.innerWidth, window.innerHeight, false);
       camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+      
+      // Debug logging on resize
+      console.log('=== RESIZE EVENT ===');
+      console.log('New viewport:', { width: window.innerWidth, height: window.innerHeight });
+      console.log('New camera aspect:', camera.aspect);
     }
     window.addEventListener('resize', resize);
 
@@ -290,6 +307,13 @@
       camera.position.y = THREE.MathUtils.damp(camera.position.y, 3.1 + (isJumping?0.15:0), 3, dt);
       camera.lookAt(playerGroup.position.x, 1.4, 0);
       if (fovKick>0){ fovKick = Math.max(0, fovKick - dt*1.5); camera.fov = 60 + fovKick*8; camera.updateProjectionMatrix(); }
+      
+      // Debug camera position every few seconds
+      if (Math.floor(camTime) % 5 === 0 && Math.floor(camTime * 10) % 10 === 0) {
+        console.log('Camera runtime position:', camera.position);
+        console.log('Camera lookAt target:', { x: playerGroup.position.x, y: 1.4, z: 0 });
+        console.log('Current FOV:', camera.fov);
+      }
     }
     function cameraKick(intensity=0.08){ fovKick = Math.min(1, fovKick + intensity); }
 
