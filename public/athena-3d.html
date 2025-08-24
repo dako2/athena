@@ -303,15 +303,17 @@
     let camTime = 0, fovKick = 0;
     function updateCamera(dt){
       camTime += dt*2.5; const sway = Math.sin(camTime)*0.02;
-      camera.position.x = THREE.MathUtils.damp(camera.position.x, playerGroup.position.x*0.25 + sway, 4, dt);
+      // Keep camera centered with subtle sway, don't follow player lanes
+      camera.position.x = THREE.MathUtils.damp(camera.position.x, sway, 4, dt);
       camera.position.y = THREE.MathUtils.damp(camera.position.y, 3.1 + (isJumping?0.15:0), 3, dt);
-      camera.lookAt(playerGroup.position.x, 1.4, 0);
+      // Always look directly toward temple center, not player position
+      camera.lookAt(0, 1.4, 0);
       if (fovKick>0){ fovKick = Math.max(0, fovKick - dt*1.5); camera.fov = 60 + fovKick*8; camera.updateProjectionMatrix(); }
       
       // Debug camera position every few seconds
       if (Math.floor(camTime) % 5 === 0 && Math.floor(camTime * 10) % 10 === 0) {
         console.log('Camera runtime position:', camera.position);
-        console.log('Camera lookAt target:', { x: playerGroup.position.x, y: 1.4, z: 0 });
+        console.log('Camera lookAt target: FIXED CENTER', { x: 0, y: 1.4, z: 0 });
         console.log('Current FOV:', camera.fov);
       }
     }
