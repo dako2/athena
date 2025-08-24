@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Athena Temple Run — 3D (three.js)</title>
+  <style>
+    :root{ --gold:#d4af37; --bg:#0b0f1a; }
+    html,body{ height:100%; }
+    body{ margin:0; overflow:hidden; background:radial-gradient(120% 100% at 50% 0%, #1a2334 0%, var(--bg) 60%, #06080f 100%); color:#fff; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+    canvas{ display:block; }
+    .hud{ position:fixed; inset:0; pointer-events:none; display:grid; grid-template-rows:auto 1fr auto; }
+    .row{ display:flex; gap:12px; align-items:center; padding:12px; }
+    .left{ justify-content:flex-start; }
+    .right{ justify-content:flex-end; }
+    .badge{ pointer-events:auto; background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.12); padding:8px 12px; border-radius:999px; backdrop-filter:blur(6px); }
+    .badge strong{ color:var(--gold); }
+    .button{ pointer-events:auto; background:linear-gradient(180deg,#f6d879,#c99f2d); color:#2a2210; border:none; padding:10px 16px; border-radius:12px; font-weight:800; letter-spacing:.3px; cursor:pointer; box-shadow:0 10px 30px rgba(212,175,55,.25); }
+    .screen{ position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:linear-gradient(180deg, rgba(10,12,20,.55), rgba(10,12,20,.9)); backdrop-filter:blur(6px); }
+    .card{ width:min(900px,92vw); border-radius:16px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); box-shadow:0 30px 80px rgba(0,0,0,.35); overflow:hidden; text-align:center; }
+    .title{ font-size:clamp(28px,4vw,44px); margin:18px 0 6px; font-weight:900; text-transform:uppercase; }
+    .subtitle{ opacity:.9; font-size:14px; margin-bottom:16px; }
+    .footer{ padding:16px; }
+    .kbd{ font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.15); padding:4px 7px; border-radius:10px; font-size:12px; }
+    .hint{ pointer-events:none; position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.15); padding:8px 12px; border-radius:999px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <canvas id="three"></canvas>
+
+  <div class="hud">
+    <div class="row left">
+      <div class="badge">Score: <strong id="score">0</strong></div>
+      <div class="badge">Owls: <strong id="owls">0</strong> 🦉</div>
+      <div class="badge">Speed: <strong id="speed">0</strong></div>
+    </div>
+    <div></div>
+    <div class="row right">
+      <button class="button" id="pauseBtn">Pause</button>
+    </div>
+  </div>
+
+  <div class="screen" id="startScreen">
+    <div class="card">
+      <div class="title">Temple Run: <span style="color:var(--gold)">Athena 3D</span></div>
+      <div class="subtitle">Three.js endless runner. Switch lanes, jump hazards, and collect owl coins as the speed ramps up.</div>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; opacity:.9; padding:0 16px 8px;">
+        <span class="kbd">←/A</span> left
+        <span class="kbd">→/D</span> right
+        <span class="kbd">↑/W/Space</span> jump
+        <span class="kbd">P</span> pause
+        <span class="kbd">Swipe</span> on mobile
+      </div>
+      <div class="footer"><button class="button" id="startBtn">Start Run</button></div>
+    </div>
+  </div>
+
+  <div class="screen" id="gameOver" style="display:none;">
+    <div class="card">
+      <div class="title" style="font-size: clamp(40px,6vw,80px);">Ouch!</div>
+      <div class="subtitle">You stumbled before Athena. Try again.</div>
+      <div class="footer"><button class="button" id="retryBtn">Run Again</button></div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">Swipe or use arrow keys</div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/environments/RoomEnvironment.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+  <script>
+
+    // ---------- Renderer / Scene / Camera ----------
+    const canvas = document.getElementById('three');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x0b0f1a, 40, 150); // Extended fog for sky view
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 220);
+    camera.position.set(0, 25, 8.5); // Elevated camera for sky runway
+
+    function resize(){
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+      // No composer resize needed
+    }
+    window.addEventListener('resize', resize);
+
+    // ---------- Environment lighting (simple ambient) ----------
+    // Using simple ambient lighting instead of RoomEnvironment for CDN compatibility
+    scene.background = new THREE.Color(0x1a2334); // Sky-like background
+
+    // ---------- Enhanced Sky Lighting ----------
+    const hemi = new THREE.HemisphereLight(0xcad8ff, 0x2a2a2a, 1.2);
+    scene.add(hemi);
+    const key = new THREE.DirectionalLight(0xfff2c8, 2.0); key.position.set(-6, 30, 6);
+    key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.camera.near = 1; key.shadow.camera.far = 80;
+    key.shadow.camera.left = -20; key.shadow.camera.right = 20; key.shadow.camera.top = 20; key.shadow.camera.bottom = -20;
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x88b6ff, 1.0); rim.position.set(6, 25, -4); scene.add(rim);
+    
+    // Add ambient sky glow
+    const skyGlow = new THREE.AmbientLight(0x4a6fa5, 0.4);
+    scene.add(skyGlow);
+
+    // ---------- Simple rendering (no postprocessing for CDN compatibility) ----------
+    // Using direct renderer instead of EffectComposer for CDN compatibility
+
+    // Layers for bloom
+    const BLOOM_LAYER = 1;
+
+    // ---------- Constants ----------
+    const LANES = [-2.6, 0, 2.6];
+    const WORLD_SPEED_START = 10; // units/s
+    let worldSpeed = WORLD_SPEED_START;
+
+    // ---------- Sky Runway (elevated and sloping upward) ----------
+    const matGround = new THREE.MeshStandardMaterial({ color:0xf0f0f0, roughness:.3, metalness:.2, emissive:0x4a4a4a, emissiveIntensity:.3 }); // Bright marble sky platform
+    const matLane = new THREE.MeshStandardMaterial({ color:0xffd700, roughness:.2, metalness:.5, emissive:0xffd700, emissiveIntensity:.4 }); // Glowing golden lanes
+    const tileLen = 70, tileW = 14, tileH = 0.4;
+    let skyRunwayHeight = 20; // Starting height in the sky
+    function makeGroundTile(z){
+      const g = new THREE.Group();
+      // Calculate upward slope - higher as we go further back (negative z)
+      const slopeHeight = skyRunwayHeight + Math.abs(z) * 0.15; // Gradual upward slope
+      const base = new THREE.Mesh(new THREE.BoxGeometry(tileW, tileH, tileLen), matGround);
+      base.position.y = slopeHeight; base.castShadow = true; base.receiveShadow = true; g.add(base);
+      for (let i=0;i<3;i++){
+        const lane = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, tileLen), matLane); 
+        lane.position.set(LANES[i], slopeHeight + 0.21, 0); lane.receiveShadow = true; lane.castShadow = true; g.add(lane);
+      }
+      g.position.z = z; scene.add(g); return g;
+    }
+    const groundA = makeGroundTile(-tileLen*0.5);
+    const groundB = makeGroundTile(-tileLen*1.5);
+    function updateGround(dt){
+      [groundA, groundB].forEach(t => t.position.z += worldSpeed*dt);
+      if (groundA.position.z > tileLen*0.5) groundA.position.z -= tileLen*2;
+      if (groundB.position.z > tileLen*0.5) groundB.position.z -= tileLen*2;
+    }
+
+    // ---------- Sky Pillars (floating columns along the runway) ----------
+    const matPillar = new THREE.MeshStandardMaterial({ color:0xf5f5f5, roughness:.3, metalness:.1, emissive:0x666666, emissiveIntensity:.25 });
+    const colGroup = new THREE.Group(); scene.add(colGroup);
+    (function buildColumns(){
+      const colGeom = new THREE.CylinderGeometry(0.3, 0.3, 4.5, 24);
+      for (let side of [-1,1]){
+        for (let i=0;i<26;i++){
+          const slopeHeight = skyRunwayHeight + (i * 3.2) * 0.15; // Match runway slope
+          const m = new THREE.Mesh(colGeom, matPillar); 
+          m.position.set(side*(tileW/2-0.9), slopeHeight + 2.25, -i*3.2);
+          m.castShadow = true; m.receiveShadow = true; colGroup.add(m);
+          
+          // Add floating crystal tops for magical effect
+          const crystalGeom = new THREE.OctahedronGeometry(0.2, 0);
+          const crystalMat = new THREE.MeshStandardMaterial({ color:0xffd700, emissive:0xffd700, emissiveIntensity:.8 });
+          const crystal = new THREE.Mesh(crystalGeom, crystalMat);
+          crystal.position.set(side*(tileW/2-0.9), slopeHeight + 4.5, -i*3.2);
+          crystal.castShadow = true; colGroup.add(crystal);
+        }
+      }
+    })();
+    function updateColumns(dt){ colGroup.position.z += worldSpeed*dt; if (colGroup.position.z > 3.2) colGroup.position.z -= 3.2; }
+
+    // ---------- Elevated Temple (destination in the sky) ----------
+    const temple = new THREE.Group();
+    (function(){
+      const templeHeight = skyRunwayHeight + 52 * 0.15 + 15; // High in the sky at the end of the slope
+      const marble = new THREE.MeshStandardMaterial({ color:0xcfc8bb, roughness:.65, metalness:.05, emissive:0x332a1a, emissiveIntensity:.2 });
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(8, 3, 4), marble);
+      roof.rotation.y = Math.PI/4; roof.position.set(0, templeHeight + 4.5, -52);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(15, 0.8, 3), marble);
+      base.position.set(0, templeHeight, -52);
+      temple.add(roof, base);
+      
+      // Temple columns
+      const cgeom = new THREE.CylinderGeometry(0.35, 0.35, 3.5, 18);
+      for (let i=-6;i<=6;i++){ 
+        const c = new THREE.Mesh(cgeom, matPillar); 
+        c.position.set(i*1.8, templeHeight + 1.75, -52); 
+        c.castShadow = true; c.receiveShadow = true;
+        temple.add(c); 
+      }
+      
+      // Glowing temple beacon
+      const beaconGeom = new THREE.SphereGeometry(0.8, 16, 16);
+      const beaconMat = new THREE.MeshStandardMaterial({ color:0xd4af37, emissive:0xd4af37, emissiveIntensity:.8 });
+      const beacon = new THREE.Mesh(beaconGeom, beaconMat);
+      beacon.position.set(0, templeHeight + 7, -52);
+      temple.add(beacon);
+      
+      scene.add(temple);
+    })();
+
+    // ---------- Human runner (simple geometry for CDN compatibility) ----------
+    const playerGroup = new THREE.Group(); scene.add(playerGroup);
+    let runner = null, runnerMixer = null, runnerReady = false;
+    
+    // Create simple runner geometry instead of loading GLTF
+    const runnerGeometry = new THREE.CapsuleGeometry(0.35, 0.9, 8, 16);
+    const runnerMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xead28b, 
+      emissive: 0x5a4a18, 
+      emissiveIntensity: 0.35 
+    });
+    runner = new THREE.Mesh(runnerGeometry, runnerMaterial);
+    runner.position.y = skyRunwayHeight + 1.2; // Position player on sky runway
+    runner.castShadow = true;
+    playerGroup.add(runner);
+    runnerReady = true;
+
+    // Soft ground shadow under player
+    const playerShadow = new THREE.Mesh(new THREE.CircleGeometry(0.6, 24), new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:.28 }));
+    playerShadow.rotation.x = -Math.PI/2; playerShadow.position.y = skyRunwayHeight + 0.41; playerGroup.add(playerShadow);
+
+    let targetLane = 1; // 0..2
+    let isJumping = false, jumpT = 0; const JUMP_DUR = 0.55;
+
+    function setLane(i){ targetLane = Math.max(0, Math.min(2, i)); }
+    function jump(){ if (!isJumping){ isJumping = true; jumpT = 0; cameraKick(0.06); } }
+
+    function updatePlayer(dt){
+      // lane lerp
+      const targetX = LANES[targetLane];
+      playerGroup.position.x = THREE.MathUtils.damp(playerGroup.position.x, targetX, 10, dt);
+      // jump arc
+      if (isJumping){
+        jumpT += dt; const t = Math.min(1, jumpT / JUMP_DUR); const lift = Math.sin(t*Math.PI) * 1.45;
+        const yBase = 1.05; // runner hips
+        if (runner) runner.position.y = yBase + lift; // animate hips
+        playerShadow.scale.setScalar(THREE.MathUtils.lerp(1, 0.6, lift/1.45));
+        if (t>=1){ isJumping=false; if (runner) runner.position.y = yBase; playerShadow.scale.setScalar(1); }
+      }
+      // No animation mixer needed for simple geometry
+    }
+
+    // ---------- Particles: gold sparks on coins + road dust ----------
+    const sparkGeo = new THREE.SphereGeometry(0.03, 6, 6);
+    const sparkMat = new THREE.MeshBasicMaterial({ color:0xffe08a });
+    function burst(x,y,z){
+      for (let i=0;i<8;i++){
+        const m = new THREE.Mesh(sparkGeo, sparkMat); m.position.set(x,y,z);
+        const vx = (Math.random()-0.5)*1.6, vy = Math.random()*1.6, vz = (Math.random()-0.5)*1.6;
+        const life = 0.35 + Math.random()*0.25; particles.push({ m, vx, vy, vz, life }); scene.add(m);
+      }
+    }
+    const particles = [];
+    function updateParticles(dt){
+      for (let i=particles.length-1;i>=0;i--){
+        const p = particles[i]; p.life -= dt; if (p.life<=0){ scene.remove(p.m); particles.splice(i,1); continue; }
+        p.m.position.x += p.vx*dt; p.m.position.y += p.vy*dt; p.m.position.z += p.vz*dt; p.m.material.opacity = Math.max(0, p.life*2);
+      }
+    }
+
+    // ---------- Obstacles & Coins ----------
+    const obstacles = []; // {mesh, lane, type}
+    const coins = [];     // {mesh, lane}
+    const spikeGeom = new THREE.ConeGeometry(0.5, 1.1, 18);
+    const pillarGeom = new THREE.CylinderGeometry(0.5, 0.5, 1.4, 24);
+    const matSpike = new THREE.MeshStandardMaterial({ color:0xa73b3b, roughness:.6, metalness:.2 });
+    const coinGeom  = new THREE.TorusGeometry(0.38, 0.12, 14, 26);
+    const matCoin   = new THREE.MeshStandardMaterial({ color:0xd4af37, roughness:.25, metalness:.85, emissive:0x2a1e07, emissiveIntensity:.22 });
+
+    function spawnObstacle(){
+      const lane = (Math.random()*3)|0; const type = Math.random()<0.7 ? 'pillar' : 'spike';
+      const mesh = new THREE.Mesh(type==='pillar'?pillarGeom:spikeGeom, type==='pillar'?matPillar:matSpike);
+      mesh.position.set(LANES[lane], type==='pillar'?0.7:0.55, -75 - Math.random()*35);
+      mesh.rotation.y = Math.random()*Math.PI; mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+      obstacles.push({ mesh, lane, type });
+    }
+    function spawnCoin(){
+      const lane = (Math.random()*3)|0; const mesh = new THREE.Mesh(coinGeom, matCoin);
+      mesh.position.set(LANES[lane], 1.3, -68 - Math.random()*28); mesh.rotation.x = Math.PI/2; scene.add(mesh);
+      coins.push({ mesh, lane });
+    }
+
+    function updateEntities(dt){
+      const vz = worldSpeed*dt;
+      for (let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; o.mesh.position.z += vz; if (o.mesh.position.z>10){ scene.remove(o.mesh); obstacles.splice(i,1); } }
+      for (let i=coins.length-1;i>=0;i--){ const c=coins[i]; c.mesh.position.z += vz; c.mesh.rotation.z += dt*5; if (c.mesh.position.z>10){ scene.remove(c.mesh); coins.splice(i,1); } }
+    }
+
+    // ---------- Camera polish (slight sway, FOV kick) ----------
+    let camTime = 0, fovKick = 0;
+    function updateCamera(dt){
+      camTime += dt*2.5; const sway = Math.sin(camTime)*0.02;
+      camera.position.x = THREE.MathUtils.damp(camera.position.x, playerGroup.position.x*0.25 + sway, 4, dt);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, skyRunwayHeight + 5 + (isJumping?0.15:0), 3, dt);
+      camera.lookAt(playerGroup.position.x, skyRunwayHeight + 1.4, 0);
+      if (fovKick>0){ fovKick = Math.max(0, fovKick - dt*1.5); camera.fov = 60 + fovKick*8; camera.updateProjectionMatrix(); }
+    }
+    function cameraKick(intensity=0.08){ fovKick = Math.min(1, fovKick + intensity); }
+
+    // ---------- Collisions ----------
+    const boxPlayer = new THREE.Box3(); const boxTemp = new THREE.Box3();
+    function checkCollisions(){
+      boxPlayer.setFromCenterAndSize(new THREE.Vector3(playerGroup.position.x, 1.2, 0), new THREE.Vector3(0.8, 1.6, 0.8));
+      for (let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; boxTemp.setFromObject(o.mesh);
+        if (boxPlayer.intersectsBox(boxTemp)){
+          if (o.type==='spike' && isJumping && (runner?runner.position.y:1.2)>1.65) continue; // hop spikes
+          return true;
+        }
+      }
+      for (let i=coins.length-1;i>=0;i--){ const c=coins[i]; boxTemp.setFromObject(c.mesh); if (boxPlayer.intersectsBox(boxTemp)){ burst(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z); scene.remove(c.mesh); coins.splice(i,1); gainCoin(); } }
+      return false;
+    }
+
+    // ---------- UI & Game State ----------
+    const ui = {
+      score: document.getElementById('score'),
+      owls: document.getElementById('owls'),
+      speed: document.getElementById('speed'),
+      start: document.getElementById('startScreen'),
+      over: document.getElementById('gameOver'),
+      startBtn: document.getElementById('startBtn'),
+      retryBtn: document.getElementById('retryBtn'),
+      pauseBtn: document.getElementById('pauseBtn'),
+      hint: document.getElementById('hint'),
+    };
+
+    let state = 'menu';
+    let score = 0, coinCount = 0, time = 0, spawnT = 0, coinT = 0;
+
+    function reset(){
+      obstacles.splice(0).forEach(o=>scene.remove(o.mesh));
+      coins.splice(0).forEach(c=>scene.remove(c.mesh));
+      particles.splice(0).forEach(p=>scene.remove(p.m));
+      groundA.position.z = -tileLen*0.5; groundB.position.z = -tileLen*1.5; colGroup.position.z = 0;
+      playerGroup.position.set(0,0,0); if (runner) runner.position.y=1.05; playerShadow.scale.setScalar(1);
+      targetLane=1; isJumping=false; jumpT=0; worldSpeed=WORLD_SPEED_START; score=0; coinCount=0; time=0; spawnT=0; coinT=0; updateHUD();
+    }
+    function updateHUD(){ ui.score.textContent = Math.floor(score).toLocaleString(); ui.owls.textContent = coinCount.toString(); ui.speed.textContent = worldSpeed.toFixed(1)+' u/s'; }
+    function gainCoin(){ coinCount++; score+=24; cameraKick(0.03); updateHUD(); }
+    function start(){ reset(); state='running'; ui.start.style.display='none'; ui.over.style.display='none'; }
+    function gameOver(){ state='over'; ui.over.style.display='grid'; }
+
+    ui.startBtn.onclick = start; ui.retryBtn.onclick = start;
+    ui.pauseBtn.onclick = ()=>{ if(state==='running') state='paused'; else if(state==='paused') state='running'; };
+
+    // ---------- Input ----------
+    function moveLeft(){ setLane(targetLane-1); }
+    function moveRight(){ setLane(targetLane+1); }
+    window.addEventListener('keydown', (e)=>{
+      if (state==='menu') return;
+      if (e.key==='ArrowLeft' || e.key==='a' || e.key==='A') moveLeft();
+      if (e.key==='ArrowRight' || e.key==='d' || e.key==='D') moveRight();
+      if (e.key==='ArrowUp' || e.key==='w' || e.key==='W' || e.key===' '){ e.preventDefault(); jump(); }
+      if (e.key==='p' || e.key==='P') ui.pauseBtn.click();
+    });
+    let tStartX=0, tStartY=0, touching=false;
+    window.addEventListener('touchstart', (e)=>{ const t=e.changedTouches[0]; touching=true; tStartX=t.clientX; tStartY=t.clientY; });
+    window.addEventListener('touchend', (e)=>{ if(!touching) return; touching=false; const t=e.changedTouches[0]; const dx=t.clientX-tStartX, dy=t.clientY-tStartY; if (Math.abs(dx)>Math.abs(dy)){ if (dx>30) moveRight(); else if (dx<-30) moveLeft(); } else { if (dy<-30) jump(); } });
+    setTimeout(()=>{ ui.hint.style.opacity=0; ui.hint.style.transition='opacity .6s ease'; }, 3000);
+
+    // ---------- Main Loop ----------
+    const clock = new THREE.Clock();
+    function frame(){
+      requestAnimationFrame(frame);
+      const dt = Math.min(0.033, clock.getDelta());
+      if (state==='running'){
+        time += dt; score += worldSpeed*dt*0.9; worldSpeed += 0.75*dt; // gentle ramp
+        spawnT -= dt; coinT -= dt;
+        if (spawnT<=0){ spawnObstacle(); spawnT = Math.max(0.45, 1.2 - time*0.04); }
+        if (coinT<=0){ spawnCoin(); coinT = Math.max(0.25, 0.8 - time*0.03); }
+        updateGround(dt); updateColumns(dt); updateEntities(dt); updatePlayer(dt); updateParticles(dt); updateCamera(dt);
+        if (checkCollisions()) gameOver();
+        updateHUD();
+      } else {
+        updateCamera(dt); // keep subtle sway on menu
+      }
+      renderer.render(scene, camera);
+    }
+    frame();
+
+    // start in menu
+  </script>
+</body>
+</html>
