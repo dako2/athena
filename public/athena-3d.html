@@ -23,6 +23,9 @@
     .footer{ padding:16px; }
     .kbd{ font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.15); padding:4px 7px; border-radius:10px; font-size:12px; }
     .hint{ pointer-events:none; position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.15); padding:8px 12px; border-radius:999px; font-size:12px; }
+    /* layering fixes */
+    canvas#three { position: fixed; inset: 0; z-index: 0; }
+    .screen { z-index: 9999; pointer-events: auto; }
   </style>
 </head>
 <body>
@@ -375,7 +378,14 @@
     }
     function updateHUD(){ ui.score.textContent = Math.floor(score).toLocaleString(); ui.owls.textContent = coinCount.toString(); ui.speed.textContent = worldSpeed.toFixed(1)+' u/s'; }
     function gainCoin(){ coinCount++; score+=24; cameraKick(0.03); updateHUD(); }
-    function start(){ reset(); state='running'; ui.start.style.display='none'; ui.over.style.display='none'; }
+    function start(){
+      if (state === 'running') return;
+      reset();
+      state = 'running';
+      ui.start.style.display = 'none';
+      ui.over.style.display = 'none';
+      console.log('[Athena3D] Start run');
+    }
     function gameOver(){ state='over'; ui.over.style.display='grid'; }
 
     ui.startBtn.onclick = start; ui.retryBtn.onclick = start;
@@ -395,6 +405,22 @@
     window.addEventListener('touchstart', (e)=>{ const t=e.changedTouches[0]; touching=true; tStartX=t.clientX; tStartY=t.clientY; });
     window.addEventListener('touchend', (e)=>{ if(!touching) return; touching=false; const t=e.changedTouches[0]; const dx=t.clientX-tStartX, dy=t.clientY-tStartY; if (Math.abs(dx)>Math.abs(dy)){ if (dx>30) moveRight(); else if (dx<-30) moveLeft(); } else { if (dy<-30) jump(); } });
     setTimeout(()=>{ ui.hint.style.opacity=0; ui.hint.style.transition='opacity .6s ease'; }, 3000);
+
+    // Start via button
+    document.getElementById('startBtn')?.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      if (state === 'menu') start();
+    });
+
+    // Global fallbacks (helpful in strict sandboxes)
+    document.addEventListener('click', ()=>{ if (state==='menu') start(); }, { once:true, capture:true });
+    document.addEventListener('pointerup', ()=>{ if (state==='menu') start(); }, { once:true, capture:true });
+    document.addEventListener('keydown', (e)=>{
+      if (state==='menu' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); start(); }
+    }, { once:true, capture:true });
+
+    // Last resort auto-start after load
+    requestAnimationFrame(()=>{ setTimeout(()=>{ if (state==='menu') start(); }, 800); });
 
     // ---------- Main Loop ----------
     const clock = new THREE.Clock();
