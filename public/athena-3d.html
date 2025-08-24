@@ -85,7 +85,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0xffd89b, 60, 180); // Warm golden fog for depth
+    scene.fog = new THREE.Fog(0xe6f3ff, 70, 200); // Soft white fog for depth
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 220);
     camera.position.set(0, 25, 8.5); // Elevated camera for sky runway
@@ -99,17 +99,16 @@
 
     // ---------- Environment lighting (simple ambient) ----------
     // Using simple ambient lighting instead of RoomEnvironment for CDN compatibility
-    scene.background = new THREE.Color(0xffd89b); // Warm sunset background
+    scene.background = new THREE.Color(0x87ceeb); // Clear sky blue background
     
-    // ---------- Stunning Sunset Sky Sphere ----------
+    // ---------- Elegant Clear Sky Sphere ----------
     const skyGeometry = new THREE.SphereGeometry(180, 32, 32);
     const skyMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        topColor: { value: new THREE.Color(0x1e3c72) },    // Deep twilight blue
-        middleColor: { value: new THREE.Color(0xff6b6b) }, // Warm sunset pink
-        bottomColor: { value: new THREE.Color(0xffd89b) }, // Golden horizon
+        topColor: { value: new THREE.Color(0x4a90e2) },    // Clear sky blue
+        bottomColor: { value: new THREE.Color(0xe6f3ff) }, // Soft white horizon
         offset: { value: 33 },
-        exponent: { value: 0.8 }
+        exponent: { value: 1.2 }
       },
       vertexShader: `
         varying vec3 vWorldPosition;
@@ -121,20 +120,13 @@
       `,
       fragmentShader: `
         uniform vec3 topColor;
-        uniform vec3 middleColor;
         uniform vec3 bottomColor;
         uniform float offset;
         uniform float exponent;
         varying vec3 vWorldPosition;
         void main() {
           float h = normalize(vWorldPosition + offset).y;
-          vec3 color;
-          if (h > 0.5) {
-            color = mix(middleColor, topColor, (h - 0.5) * 2.0);
-          } else {
-            color = mix(bottomColor, middleColor, h * 2.0);
-          }
-          gl_FragColor = vec4(color, 1.0);
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
         }
       `,
       side: THREE.BackSide
@@ -142,17 +134,17 @@
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
     scene.add(sky);
 
-    // ---------- Stunning Sunset Lighting ----------
-    const hemi = new THREE.HemisphereLight(0xffd89b, 0xff6b6b, 1.8); // Warm sunset hemisphere light
+    // ---------- Clean Daylight Lighting ----------
+    const hemi = new THREE.HemisphereLight(0x87ceeb, 0xffffff, 1.2); // Clear sky hemisphere light
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffaa44, 3.0); key.position.set(-8, 45, 8); // Golden sun light
+    const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(-6, 50, 8); // Bright white sun light
     key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.camera.near = 1; key.shadow.camera.far = 120;
     key.shadow.camera.left = -30; key.shadow.camera.right = 30; key.shadow.camera.top = 30; key.shadow.camera.bottom = -30;
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0xff6b6b, 1.5); rim.position.set(8, 40, -6); scene.add(rim); // Warm pink rim light
+    const rim = new THREE.DirectionalLight(0x87ceeb, 0.8); rim.position.set(8, 40, -6); scene.add(rim); // Soft blue rim light
     
-    // Add magical ambient glow
-    const skyGlow = new THREE.AmbientLight(0xffd89b, 0.8);
+    // Add clean ambient light
+    const skyGlow = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(skyGlow);
 
     // ---------- Simple rendering (no postprocessing for CDN compatibility) ----------
@@ -166,9 +158,9 @@
     const WORLD_SPEED_START = 10; // units/s
     let worldSpeed = WORLD_SPEED_START;
 
-    // ---------- Magical Sky Runway (elevated and sloping upward) ----------
-    const matGround = new THREE.MeshStandardMaterial({ color:0xf8f8ff, roughness:.15, metalness:.4, emissive:0xffd89b, emissiveIntensity:.3 }); // Ethereal white marble with golden glow
-    const matLane = new THREE.MeshStandardMaterial({ color:0xffd700, roughness:.05, metalness:.8, emissive:0xffaa44, emissiveIntensity:.8 }); // Brilliant golden lanes with intense glow
+    // ---------- Elegant Sky Runway (elevated and sloping upward) ----------
+    const matGround = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:.1, metalness:.2, emissive:0x4a90e2, emissiveIntensity:.1 }); // Pure white marble with subtle blue glow
+    const matLane = new THREE.MeshStandardMaterial({ color:0x4a90e2, roughness:.05, metalness:.6, emissive:0x87ceeb, emissiveIntensity:.3 }); // Elegant blue lanes with soft glow
     const tileLen = 70, tileW = 14, tileH = 0.4;
     let skyRunwayHeight = 20; // Starting height in the sky
     function makeGroundTile(z){
@@ -191,8 +183,8 @@
       if (groundB.position.z > tileLen*0.5) groundB.position.z -= tileLen*2;
     }
 
-    // ---------- Majestic Sky Pillars (floating columns along the runway) ----------
-    const matPillar = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:.1, metalness:.3, emissive:0xff6b6b, emissiveIntensity:.5 });
+    // ---------- Elegant Sky Pillars (floating columns along the runway) ----------
+    const matPillar = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:.05, metalness:.1, emissive:0x87ceeb, emissiveIntensity:.2 });
     const colGroup = new THREE.Group(); scene.add(colGroup);
     (function buildColumns(){
       const colGeom = new THREE.CylinderGeometry(0.3, 0.3, 4.5, 24);
