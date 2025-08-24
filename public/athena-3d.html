@@ -91,67 +91,25 @@
     scene.fog = new THREE.Fog(0xe6f3ff, 70, 200); // Soft white fog for depth
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 220);
-    camera.position.set(0, 25, 8.5); // Elevated camera for sky runway
+    camera.position.set(0, 3.1, 8.5); // Elevated camera for sky runway
 
     function resize(){
       renderer.setSize(window.innerWidth, window.innerHeight, false);
       camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
-      // No composer resize needed
     }
     window.addEventListener('resize', resize);
 
-    // ---------- Environment lighting (simple ambient) ----------
-    // Using simple ambient lighting instead of RoomEnvironment for CDN compatibility
-    scene.background = new THREE.Color(0x87ceeb); // Clear sky blue background
+    // ---------- Simple Sky Background ----------
+    scene.background = new THREE.Color(0x87CEEB);
     
-    // ---------- Elegant Clear Sky Sphere ----------
-    const skyGeometry = new THREE.SphereGeometry(180, 32, 32);
-    const skyMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        topColor: { value: new THREE.Color(0x4a90e2) },    // Clear sky blue
-        bottomColor: { value: new THREE.Color(0xe6f3ff) }, // Soft white horizon
-        offset: { value: 33 },
-        exponent: { value: 1.2 }
-      },
-      vertexShader: `
-        varying vec3 vWorldPosition;
-        void main() {
-          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-          vWorldPosition = worldPosition.xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 topColor;
-        uniform vec3 bottomColor;
-        uniform float offset;
-        uniform float exponent;
-        varying vec3 vWorldPosition;
-        void main() {
-          float h = normalize(vWorldPosition + offset).y;
-          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-        }
-      `,
-      side: THREE.BackSide
-    });
-    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
-    scene.add(sky);
-
-    // ---------- Clean Daylight Lighting ----------
-    const hemi = new THREE.HemisphereLight(0x87ceeb, 0xffffff, 1.2); // Clear sky hemisphere light
+    // ---------- Lights ----------
+    const hemi = new THREE.HemisphereLight(0xcad8ff, 0x0a0a0a, 0.7);
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(-6, 50, 8); // Bright white sun light
-    key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.camera.near = 1; key.shadow.camera.far = 120;
-    key.shadow.camera.left = -30; key.shadow.camera.right = 30; key.shadow.camera.top = 30; key.shadow.camera.bottom = -30;
+    const key = new THREE.DirectionalLight(0xfff2c8, 1.35); key.position.set(-6, 8, 6);
+    key.castShadow = true; key.shadow.mapSize.set(1024,1024); key.shadow.camera.near = 1; key.shadow.camera.far = 40;
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0x87ceeb, 0.8); rim.position.set(8, 40, -6); scene.add(rim); // Soft blue rim light
-    
-    // Add clean ambient light
-    const skyGlow = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(skyGlow);
+    const rim = new THREE.DirectionalLight(0x88b6ff, 0.7); rim.position.set(6, 6, -4); scene.add(rim);
 
-    // ---------- Simple rendering (no postprocessing for CDN compatibility) ----------
-    // Using direct renderer instead of EffectComposer for CDN compatibility
 
     // Layers for bloom
     const BLOOM_LAYER = 1;
@@ -161,20 +119,18 @@
     const WORLD_SPEED_START = 10; // units/s
     let worldSpeed = WORLD_SPEED_START;
 
-    // ---------- Elegant Sky Runway (elevated and sloping upward) ----------
-    const matGround = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:.1, metalness:.2, emissive:0x4a90e2, emissiveIntensity:.1 }); // Pure white marble with subtle blue glow
-    const matLane = new THREE.MeshStandardMaterial({ color:0x4a90e2, roughness:.05, metalness:.6, emissive:0x87ceeb, emissiveIntensity:.3 }); // Elegant blue lanes with soft glow
-    const tileLen = 70, tileW = 14, tileH = 0.4;
-    let skyRunwayHeight = 20; // Starting height in the sky
+    // ---------- Ground (looping tiles with bevels) ----------
+    const matGround = new THREE.MeshStandardMaterial({ color:0x1b2234, roughness:.85, metalness:.05 });
+    const matLane = new THREE.MeshStandardMaterial({ color:0x232b40, roughness:.75, metalness:.1 });
+    const tileLen = 70, tileW = 14, tileH = 0.24;
     function makeGroundTile(z){
       const g = new THREE.Group();
       // Calculate upward slope - higher as we go further back (negative z)
-      const slopeHeight = skyRunwayHeight + Math.abs(z) * 0.15; // Gradual upward slope
       const base = new THREE.Mesh(new THREE.BoxGeometry(tileW, tileH, tileLen), matGround);
-      base.position.y = slopeHeight; base.castShadow = true; base.receiveShadow = true; g.add(base);
+      base.position.y = -0.1; base.castShadow = false; base.receiveShadow = true; g.add(base);
       for (let i=0;i<3;i++){
-        const lane = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, tileLen), matLane); 
-        lane.position.set(LANES[i], slopeHeight + 0.21, 0); lane.receiveShadow = true; lane.castShadow = true; g.add(lane);
+        const lane = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, tileLen), matLane); 
+        lane.position.set(LANES[i], 0, 0); lane.receiveShadow = true; g.add(lane);
       }
       g.position.z = z; scene.add(g); return g;
     }
@@ -186,23 +142,22 @@
       if (groundB.position.z > tileLen*0.5) groundB.position.z -= tileLen*2;
     }
 
-    // ---------- Elegant Sky Pillars (floating columns along the runway) ----------
-    const matPillar = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:.05, metalness:.1, emissive:0x87ceeb, emissiveIntensity:.2 });
+    // ---------- Side colonnade (marble columns) ----------
+    const matPillar = new THREE.MeshStandardMaterial({ color:0xe0dbd0, roughness:.5, metalness:.05 });
     const colGroup = new THREE.Group(); scene.add(colGroup);
     (function buildColumns(){
-      const colGeom = new THREE.CylinderGeometry(0.3, 0.3, 4.5, 24);
+      const colGeom = new THREE.CylinderGeometry(0.25, 0.25, 3.2, 24);
       for (let side of [-1,1]){
         for (let i=0;i<26;i++){
-          const slopeHeight = skyRunwayHeight + (i * 3.2) * 0.15; // Match runway slope
           const m = new THREE.Mesh(colGeom, matPillar); 
-          m.position.set(side*(tileW/2-0.9), slopeHeight + 2.25, -i*3.2);
+          m.position.set(side*(tileW/2-0.9), 1.6, -i*3.2);
           m.castShadow = true; m.receiveShadow = true; colGroup.add(m);
           
           // Add floating crystal tops for magical effect
           const crystalGeom = new THREE.OctahedronGeometry(0.2, 0);
           const crystalMat = new THREE.MeshStandardMaterial({ color:0xffd700, emissive:0xffd700, emissiveIntensity:.8 });
           const crystal = new THREE.Mesh(crystalGeom, crystalMat);
-          crystal.position.set(side*(tileW/2-0.9), slopeHeight + 4.5, -i*3.2);
+          crystal.position.set(side*(tileW/2-0.9), 4.5, -i*3.2);
           crystal.castShadow = true; colGroup.add(crystal);
         }
       }
@@ -212,7 +167,7 @@
     // ---------- Elevated Temple (destination in the sky) ----------
     const temple = new THREE.Group();
     (function(){
-      const templeHeight = skyRunwayHeight + 52 * 0.15 + 15; // High in the sky at the end of the slope
+      const templeHeight = 3.8; // Ground level temple height
       const marble = new THREE.MeshStandardMaterial({ color:0xcfc8bb, roughness:.65, metalness:.05, emissive:0x332a1a, emissiveIntensity:.2 });
       const roof = new THREE.Mesh(new THREE.ConeGeometry(8, 3, 4), marble);
       roof.rotation.y = Math.PI/4; roof.position.set(0, templeHeight + 4.5, -52);
@@ -251,14 +206,14 @@
       emissiveIntensity: 0.35 
     });
     runner = new THREE.Mesh(runnerGeometry, runnerMaterial);
-    runner.position.y = skyRunwayHeight + 1.2; // Position player on sky runway
+    runner.position.y = 1.05; // Position player on ground
     runner.castShadow = true;
     playerGroup.add(runner);
     runnerReady = true;
 
     // Soft ground shadow under player
     const playerShadow = new THREE.Mesh(new THREE.CircleGeometry(0.6, 24), new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:.28 }));
-    playerShadow.rotation.x = -Math.PI/2; playerShadow.position.y = skyRunwayHeight + 0.41; playerGroup.add(playerShadow);
+    playerShadow.rotation.x = -Math.PI/2; playerShadow.position.y = 0.41; playerGroup.add(playerShadow);
 
     let targetLane = 1; // 0..2
     let isJumping = false, jumpT = 0; const JUMP_DUR = 0.55;
@@ -311,13 +266,13 @@
     function spawnObstacle(){
       const lane = (Math.random()*3)|0; const type = Math.random()<0.7 ? 'pillar' : 'spike';
       const mesh = new THREE.Mesh(type==='pillar'?pillarGeom:spikeGeom, type==='pillar'?matPillar:matSpike);
-      mesh.position.set(LANES[lane], skyRunwayHeight + (type==='pillar'?0.7:0.55), -75 - Math.random()*35);
+      mesh.position.set(LANES[lane], type==='pillar'?0.7:0.55, -75 - Math.random()*35);
       mesh.rotation.y = Math.random()*Math.PI; mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
       obstacles.push({ mesh, lane, type });
     }
     function spawnCoin(){
       const lane = (Math.random()*3)|0; const mesh = new THREE.Mesh(coinGeom, matCoin);
-      mesh.position.set(LANES[lane], skyRunwayHeight + 1.3, -68 - Math.random()*28); mesh.rotation.x = Math.PI/2; scene.add(mesh);
+      mesh.position.set(LANES[lane], 1.3, -68 - Math.random()*28); mesh.rotation.x = Math.PI/2; scene.add(mesh);
       coins.push({ mesh, lane });
     }
 
@@ -332,8 +287,8 @@
     function updateCamera(dt){
       camTime += dt*2.5; const sway = Math.sin(camTime)*0.02;
       camera.position.x = THREE.MathUtils.damp(camera.position.x, playerGroup.position.x*0.25 + sway, 4, dt);
-      camera.position.y = THREE.MathUtils.damp(camera.position.y, skyRunwayHeight + 5 + (isJumping?0.15:0), 3, dt);
-      camera.lookAt(playerGroup.position.x, skyRunwayHeight + 1.4, 0);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, 3.1 + (isJumping?0.15:0), 3, dt);
+      camera.lookAt(playerGroup.position.x, 1.4, 0);
       if (fovKick>0){ fovKick = Math.max(0, fovKick - dt*1.5); camera.fov = 60 + fovKick*8; camera.updateProjectionMatrix(); }
     }
     function cameraKick(intensity=0.08){ fovKick = Math.min(1, fovKick + intensity); }
