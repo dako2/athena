@@ -85,7 +85,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x0b0f1a, 40, 150); // Extended fog for sky view
+    scene.fog = new THREE.Fog(0x87CEEB, 80, 200); // Light sky blue fog for depth
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 220);
     camera.position.set(0, 25, 8.5); // Elevated camera for sky runway
@@ -99,19 +99,52 @@
 
     // ---------- Environment lighting (simple ambient) ----------
     // Using simple ambient lighting instead of RoomEnvironment for CDN compatibility
-    scene.background = new THREE.Color(0x1a2334); // Sky-like background
+    scene.background = new THREE.Color(0x87CEEB); // Beautiful sky blue background
+    
+    // ---------- Beautiful Sky Sphere ----------
+    const skyGeometry = new THREE.SphereGeometry(180, 32, 32);
+    const skyMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color(0x0077ff) },    // Deep sky blue
+        bottomColor: { value: new THREE.Color(0x87CEEB) }, // Light sky blue
+        offset: { value: 33 },
+        exponent: { value: 0.6 }
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + offset).y;
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+      `,
+      side: THREE.BackSide
+    });
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+    scene.add(sky);
 
     // ---------- Enhanced Sky Lighting ----------
-    const hemi = new THREE.HemisphereLight(0xcad8ff, 0x2a2a2a, 1.2);
+    const hemi = new THREE.HemisphereLight(0x87CEEB, 0x4682B4, 1.5); // Sky blue hemisphere light
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xfff2c8, 2.0); key.position.set(-6, 30, 6);
-    key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.camera.near = 1; key.shadow.camera.far = 80;
-    key.shadow.camera.left = -20; key.shadow.camera.right = 20; key.shadow.camera.top = 20; key.shadow.camera.bottom = -20;
+    const key = new THREE.DirectionalLight(0xFFFACD, 2.5); key.position.set(-6, 40, 6); // Bright sun-like light
+    key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.camera.near = 1; key.shadow.camera.far = 100;
+    key.shadow.camera.left = -25; key.shadow.camera.right = 25; key.shadow.camera.top = 25; key.shadow.camera.bottom = -25;
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0x88b6ff, 1.0); rim.position.set(6, 25, -4); scene.add(rim);
+    const rim = new THREE.DirectionalLight(0xB0E0E6, 1.2); rim.position.set(6, 35, -4); scene.add(rim); // Powder blue rim light
     
-    // Add ambient sky glow
-    const skyGlow = new THREE.AmbientLight(0x4a6fa5, 0.4);
+    // Add bright ambient sky glow
+    const skyGlow = new THREE.AmbientLight(0x87CEEB, 0.6);
     scene.add(skyGlow);
 
     // ---------- Simple rendering (no postprocessing for CDN compatibility) ----------
@@ -126,8 +159,8 @@
     let worldSpeed = WORLD_SPEED_START;
 
     // ---------- Sky Runway (elevated and sloping upward) ----------
-    const matGround = new THREE.MeshStandardMaterial({ color:0xf0f0f0, roughness:.3, metalness:.2, emissive:0x4a4a4a, emissiveIntensity:.3 }); // Bright marble sky platform
-    const matLane = new THREE.MeshStandardMaterial({ color:0xffd700, roughness:.2, metalness:.5, emissive:0xffd700, emissiveIntensity:.4 }); // Glowing golden lanes
+    const matGround = new THREE.MeshStandardMaterial({ color:0xE6E6FA, roughness:.2, metalness:.3, emissive:0x9370DB, emissiveIntensity:.2 }); // Lavender marble sky platform
+    const matLane = new THREE.MeshStandardMaterial({ color:0xFFD700, roughness:.1, metalness:.6, emissive:0xFFD700, emissiveIntensity:.6 }); // Bright glowing golden lanes
     const tileLen = 70, tileW = 14, tileH = 0.4;
     let skyRunwayHeight = 20; // Starting height in the sky
     function makeGroundTile(z){
@@ -151,7 +184,7 @@
     }
 
     // ---------- Sky Pillars (floating columns along the runway) ----------
-    const matPillar = new THREE.MeshStandardMaterial({ color:0xf5f5f5, roughness:.3, metalness:.1, emissive:0x666666, emissiveIntensity:.25 });
+    const matPillar = new THREE.MeshStandardMaterial({ color:0xF0F8FF, roughness:.2, metalness:.2, emissive:0xB0C4DE, emissiveIntensity:.4 });
     const colGroup = new THREE.Group(); scene.add(colGroup);
     (function buildColumns(){
       const colGeom = new THREE.CylinderGeometry(0.3, 0.3, 4.5, 24);
@@ -275,13 +308,13 @@
     function spawnObstacle(){
       const lane = (Math.random()*3)|0; const type = Math.random()<0.7 ? 'pillar' : 'spike';
       const mesh = new THREE.Mesh(type==='pillar'?pillarGeom:spikeGeom, type==='pillar'?matPillar:matSpike);
-      mesh.position.set(LANES[lane], type==='pillar'?0.7:0.55, -75 - Math.random()*35);
+      mesh.position.set(LANES[lane], skyRunwayHeight + (type==='pillar'?0.7:0.55), -75 - Math.random()*35);
       mesh.rotation.y = Math.random()*Math.PI; mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
       obstacles.push({ mesh, lane, type });
     }
     function spawnCoin(){
       const lane = (Math.random()*3)|0; const mesh = new THREE.Mesh(coinGeom, matCoin);
-      mesh.position.set(LANES[lane], 1.3, -68 - Math.random()*28); mesh.rotation.x = Math.PI/2; scene.add(mesh);
+      mesh.position.set(LANES[lane], skyRunwayHeight + 1.3, -68 - Math.random()*28); mesh.rotation.x = Math.PI/2; scene.add(mesh);
       coins.push({ mesh, lane });
     }
 
